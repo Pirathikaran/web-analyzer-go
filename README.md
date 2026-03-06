@@ -4,7 +4,7 @@ A web page analysis tool built with Go. You give it a URL, it fetches the page a
 
 ## System Design
 
-![System Design](systemDesign.png)
+![System Design](SystemDesign.png)
 
 ## What It Does
 
