@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Analyzer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f5f5f5;
+      color: #222;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 1.5rem;
+      color: #1a1a2e;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    input[type="url"] {
+      flex: 1;
+      padding: 0.6rem 0.8rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    button[type="submit"] {
+      padding: 0.6rem 1.4rem;
+      font-size: 1rem;
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button[type="submit"]:hover { background: #1558b0; }
+
+    .error {
+      margin-top: 1.2rem;
+      padding: 0.8rem 1rem;
+      background: #fce8e6;
+      border-left: 4px solid #d93025;
+      border-radius: 2px;
+      color: #5f0000;
+    }
+
+    .results {
+      margin-top: 1.8rem;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .results h2 {
+      padding: 0.8rem 1.2rem;
+      font-size: 1rem;
+      background: #1a1a2e;
+      color: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    tr:nth-child(even) { background: #f9f9f9; }
+
+    td {
+      padding: 0.6rem 1.2rem;
+      border-bottom: 1px solid #eee;
+      font-size: 0.95rem;
+    }
+
+    td:first-child { font-weight: 600; width: 55%; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .badge-yes  { background: #e6f4ea; color: #137333; }
+    .badge-no   { background: #fce8e6; color: #c5221f; }
+
+    .headings-grid {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      padding: 0.6rem 1.2rem;
+    }
+
+    .heading-chip {
+      padding: 0.25rem 0.7rem;
+      background: #e8f0fe;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #1a73e8;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Web Page Analyzer</h1>
+
+  <form method="POST" action="/analyze">
+    <div class="form-row">
+      <input
+        type="url"
+        name="url"
+        placeholder="https://example.com"
+        value="{{ .URL }}"
+        required
+        autofocus
+      >
+      <button type="submit">Analyze</button>
+    </div>
+  </form>
+
+  {{ if .Error }}
+  <div class="error">{{ .Error }}</div>
+  {{ end }}
+
+  {{ if .Result }}
+  <div class="results">
+    <h2>Analysis Results &mdash; {{ .Result.URL }}</h2>
+    <table>
+      <tr><td>HTML Version</td>         <td>{{ .Result.HTMLVersion }}</td></tr>
+      <tr><td>Page Title</td>           <td>{{ .Result.Title }}</td></tr>
+      <tr><td>Internal Links</td>       <td>{{ .Result.InternalLinks }}</td></tr>
+      <tr><td>External Links</td>       <td>{{ .Result.ExternalLinks }}</td></tr>
+      <tr><td>Inaccessible Links</td>   <td>{{ .Result.InaccessibleLinks }}</td></tr>
+      <tr>
+        <td>Login Form Present</td>
+        <td>
+          {{ if .Result.HasLoginForm }}
+            <span class="badge badge-yes">Yes</span>
+          {{ else }}
+            <span class="badge badge-no">No</span>
+          {{ end }}
+        </td>
+      </tr>
+    </table>
+
+    {{ if .Result.Headings }}
+    <div class="headings-grid">
+      {{ range $tag, $count := .Result.Headings }}
+        <span class="heading-chip">{{ $tag | upper }}: {{ $count }}</span>
+      {{ end }}
+    </div>
+    {{ end }}
+  </div>
+  {{ end }}
+</div>
+</body>
+</html>
