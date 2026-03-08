@@ -55,6 +55,13 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+		http.Error(w, "invalid content type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	rawURL := r.FormValue("url")
 
 	if err := analyzer.ValidateURL(rawURL); err != nil {
