@@ -172,3 +172,19 @@ go test ./...
 - **golang.org/x/net/html** — HTML parsing
 - **Prometheus** — metrics and monitoring
 - **Docker** — containerized deployment (multi-stage build, minimal Alpine image)
+
+---
+
+## Future Improvements
+
+- **Per-IP Rate Limiting** — Current rate limiting is global. It can be improved by implementing per-IP or per-user rate limits to prevent a single client from consuming all available requests.
+
+- **Caching Layer** — Introduce a caching mechanism using Redis to store analysis results for frequently requested URLs. This reduces repeated processing and improves response time.
+
+- **Horizontal Scalability** — Deploy multiple instances of the service behind a load balancer so the system can handle higher traffic and scale efficiently.
+
+- **Security Improvements** — Add HTTP security headers and implement additional validation to prevent attacks such as Server-Side Request Forgery (SSRF).
+
+- **Configuration Management** — Move configurable values (worker pool size, request timeout, rate limits) to environment variables to improve maintainability and deployment flexibility.
+
+- **Observability Enhancements** — Extend monitoring by adding dashboards with Grafana and perform load testing using k6 to evaluate performance under heavy traffic.
