@@ -164,5 +164,14 @@ type HTTPError struct {
 }
 
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("HTTP %d: %s", e.Code, e.Message)
+	msg := e.Message
+	if msg == "" {
+		switch e.Code {
+		case 999:
+			msg = "request blocked by the target site (bot protection)"
+		default:
+			msg = "unexpected status code"
+		}
+	}
+	return fmt.Sprintf("HTTP %d: %s", e.Code, msg)
 }

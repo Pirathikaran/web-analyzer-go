@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/Pirathikaran/web-analyzer/internal/analyzer"
@@ -19,20 +20,20 @@ type pageData struct {
 }
 
 type Handler struct {
-	analyzer  *analyzer.Analyzer
+	pool      *analyzer.Pool
 	templates *template.Template
 	metrics   *metrics.Metrics
 	logger    *slog.Logger
 }
 
 func New(
-	a *analyzer.Analyzer,
+	pool *analyzer.Pool,
 	tmpl *template.Template,
 	m *metrics.Metrics,
 	logger *slog.Logger,
 ) *Handler {
 	return &Handler{
-		analyzer:  a,
+		pool:      pool,
 		templates: tmpl,
 		metrics:   m,
 		logger:    logger,
@@ -44,12 +45,17 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	h.render(w, r, http.StatusOK, pageData{})
+
+	rawURL := r.URL.Query().Get("url")
+	if rawURL == "" {
+		h.render(w, r, http.StatusOK, pageData{})
+		return
+	}
+
+	h.runAnalysis(w, r, rawURL)
 }
 
 func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -73,11 +79,23 @@ func (h *Handler) Analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	http.Redirect(w, r, "/?url="+url.QueryEscape(rawURL), http.StatusSeeOther)
+}
+
+func (h *Handler) runAnalysis(w http.ResponseWriter, r *http.Request, rawURL string) {
+	start := time.Now()
+
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	result, err := h.analyzer.Analyze(ctx, rawURL)
+	result, err := h.pool.Submit(ctx, rawURL)
 	duration := time.Since(start).Seconds()
+
+	if errors.Is(err, analyzer.ErrQueueFull) {
+		h.metrics.RequestsTotal.WithLabelValues("queue_full").Inc()
+		http.Error(w, "server busy, try again later", http.StatusServiceUnavailable)
+		return
+	}
 
 	if err != nil {
 		h.metrics.AnalysisErrors.Inc()

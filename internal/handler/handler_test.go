@@ -15,20 +15,20 @@ import (
 	"github.com/Pirathikaran/web-analyzer/internal/metrics"
 )
 
-// minimalTemplate renders only the .Error and a marker so we can assert output.
 const tmplSrc = `{{define "index.html"}}` +
 	`{{if .Error}}ERROR:{{.Error}}{{end}}` +
 	`{{if .Result}}RESULT:{{.Result.Title}}{{end}}` +
 	`{{end}}`
 
-func newHandler(t *testing.T, backendURL string) http.Handler {
+func newHandler(t *testing.T) http.Handler {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	tmpl := template.Must(template.New("").Parse(tmplSrc))
 	client := &http.Client{}
 	a := analyzer.New(client, logger)
+	pool := analyzer.NewPool(a, 5, 100)
 	m := metrics.New()
-	h := handler.New(a, tmpl, m, logger)
+	h := handler.New(pool, tmpl, m, logger)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", h.Index)
@@ -37,7 +37,7 @@ func newHandler(t *testing.T, backendURL string) http.Handler {
 }
 
 func TestIndex_GET(t *testing.T) {
-	h := newHandler(t, "")
+	h := newHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -48,7 +48,7 @@ func TestIndex_GET(t *testing.T) {
 }
 
 func TestIndex_NotFound(t *testing.T) {
-	h := newHandler(t, "")
+	h := newHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/no-such-path", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -58,7 +58,7 @@ func TestIndex_NotFound(t *testing.T) {
 }
 
 func TestAnalyze_InvalidURL(t *testing.T) {
-	h := newHandler(t, "")
+	h := newHandler(t)
 
 	form := url.Values{"url": {"not-a-url"}}
 	req := httptest.NewRequest(http.MethodPost, "/analyze", strings.NewReader(form.Encode()))
@@ -75,7 +75,6 @@ func TestAnalyze_InvalidURL(t *testing.T) {
 }
 
 func TestAnalyze_ValidURL(t *testing.T) {
-	// Spin up a local test server to avoid real HTTP.
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {
 			w.WriteHeader(http.StatusOK)
@@ -86,7 +85,7 @@ func TestAnalyze_ValidURL(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	h := newHandler(t, backend.URL)
+	h := newHandler(t)
 
 	form := url.Values{"url": {backend.URL}}
 	req := httptest.NewRequest(http.MethodPost, "/analyze", strings.NewReader(form.Encode()))
@@ -94,16 +93,25 @@ func TestAnalyze_ValidURL(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", rr.Code)
+	if rr.Code != http.StatusSeeOther {
+		t.Errorf("POST status = %d, want 303", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "RESULT:Test") {
-		t.Errorf("body should contain result title, got: %s", rr.Body.String())
+
+	location := rr.Header().Get("Location")
+	req2 := httptest.NewRequest(http.MethodGet, location, nil)
+	rr2 := httptest.NewRecorder()
+	h.ServeHTTP(rr2, req2)
+
+	if rr2.Code != http.StatusOK {
+		t.Errorf("GET status = %d, want 200", rr2.Code)
+	}
+	if !strings.Contains(rr2.Body.String(), "RESULT:Test") {
+		t.Errorf("body should contain result title, got: %s", rr2.Body.String())
 	}
 }
 
 func TestAnalyze_MethodNotAllowed(t *testing.T) {
-	h := newHandler(t, "")
+	h := newHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/analyze", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -113,15 +121,12 @@ func TestAnalyze_MethodNotAllowed(t *testing.T) {
 }
 
 func TestAnalyze_UnreachableURL(t *testing.T) {
-	h := newHandler(t, "")
+	h := newHandler(t)
 
-	form := url.Values{"url": {"http://127.0.0.1:19999/no-such-server"}}
-	req := httptest.NewRequest(http.MethodPost, "/analyze", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req := httptest.NewRequest(http.MethodGet, "/?url=http://127.0.0.1:19999/no-such-server", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	// Unreachable → error rendered
 	if !strings.Contains(rr.Body.String(), "ERROR:") {
 		t.Errorf("expected error in body for unreachable URL, got: %s", rr.Body.String())
 	}

@@ -34,8 +34,9 @@ func buildApp(t *testing.T) *httptest.Server {
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	a := analyzer.New(client, logger)
+	pool := analyzer.NewPool(a, 5, 100)
 	m := metrics.New()
-	h := handler.New(a, tmpl, m, logger)
+	h := handler.New(pool, tmpl, m, logger)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", h.Index)

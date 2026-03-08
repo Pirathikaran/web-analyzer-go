@@ -43,8 +43,9 @@ func main() {
 	}
 
 	a := analyzer.New(httpClient, logger)
+	pool := analyzer.NewPool(a, 20, 1000)
 	m := metrics.New()
-	h := handler.New(a, tmpl, m, logger)
+	h := handler.New(pool, tmpl, m, logger)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", h.Index)
