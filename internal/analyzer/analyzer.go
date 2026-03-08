@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -44,8 +45,9 @@ func ValidateURL(rawURL string) error {
 	if !urlPattern.MatchString(rawURL) {
 		return fmt.Errorf("invalid URL format: %q", rawURL)
 	}
-	if _, err := url.ParseRequestURI(rawURL); err != nil {
-		return fmt.Errorf("URL parse error: %w", err)
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return errors.New("invalid url scheme")
 	}
 	return nil
 }

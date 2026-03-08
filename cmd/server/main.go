@@ -59,7 +59,7 @@ func main() {
 		}
 	}()
 
-	logged := handler.Logging(logger, handler.Recover(logger, mux))
+	logged := handler.Logging(logger, handler.Recover(logger, handler.RateLimit(mux)))
 
 	srv := &http.Server{
 		Addr:         ":" + port,
