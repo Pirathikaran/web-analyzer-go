@@ -7,9 +7,14 @@ import (
 	"golang.org/x/net/html"
 )
 
+const MaxLinks = 500
+
 func collectLinks(doc *html.Node, base *url.URL) (internal, external []string) {
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
+		if len(internal)+len(external) >= MaxLinks {
+			return
+		}
 		if n.Type == html.ElementNode && n.Data == "a" {
 			if href := attrVal(n, "href"); href != "" {
 				if abs, ok := resolveURL(base, href); ok {

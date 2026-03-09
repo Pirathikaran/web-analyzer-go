@@ -6,6 +6,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -42,8 +43,13 @@ func main() {
 		},
 	}
 
-	a := analyzer.New(httpClient, logger)
-	pool := analyzer.NewPool(a, 20, 1000)
+	workers  := getEnvInt("POOL_WORKERS", 20)
+	queueSize := getEnvInt("POOL_QUEUE", 1000)
+	semSize  := getEnvInt("LINK_SEM", 50)
+
+	globalSem := make(chan struct{}, semSize)
+	a := analyzer.New(httpClient, logger, globalSem)
+	pool := analyzer.NewPool(a, workers, queueSize)
 	m := metrics.New()
 	h := handler.New(pool, tmpl, m, logger)
 
@@ -75,6 +81,15 @@ func main() {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+func getEnvInt(key string, defaultVal int) int {
+	if s := os.Getenv(key); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			return v
+		}
+	}
+	return defaultVal
 }
 
 func strings_ToUpper(s string) string {

@@ -24,8 +24,9 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
+# env file (.example is committed as a template; .env is local and ignored)
 .env
+!.env.example
 
 # Editor/IDE
 # .idea/

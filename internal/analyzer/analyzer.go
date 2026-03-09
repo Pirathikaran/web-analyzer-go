@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -13,6 +14,11 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
+)
+
+const (
+	maxResponseBodyBytes  = 10 * 1024 * 1024 // 10 MB
+	linkCheckConcurrency  = 10
 )
 
 var urlPattern = regexp.MustCompile(`^https?://[^\s/$.?#].[^\s]*$`)
@@ -29,12 +35,13 @@ type Result struct {
 }
 
 type Analyzer struct {
-	client *http.Client
-	logger *slog.Logger
+	client    *http.Client
+	logger    *slog.Logger
+	globalSem chan struct{} // global cap on concurrent outbound link-check requests
 }
 
-func New(client *http.Client, logger *slog.Logger) *Analyzer {
-	return &Analyzer{client: client, logger: logger}
+func New(client *http.Client, logger *slog.Logger, globalSem chan struct{}) *Analyzer {
+	return &Analyzer{client: client, logger: logger, globalSem: globalSem}
 }
 
 func ValidateURL(rawURL string) error {
@@ -71,7 +78,7 @@ func (a *Analyzer) Analyze(ctx context.Context, rawURL string) (*Result, error) 
 		return nil, &HTTPError{Code: resp.StatusCode, Message: http.StatusText(resp.StatusCode)}
 	}
 
-	doc, err := html.Parse(resp.Body)
+	doc, err := html.Parse(io.LimitReader(resp.Body, maxResponseBodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
@@ -107,38 +114,49 @@ func (a *Analyzer) Analyze(ctx context.Context, rawURL string) (*Result, error) 
 }
 
 func (a *Analyzer) checkInaccessibleLinks(ctx context.Context, links []string) int {
-	unique := make(map[string]struct{}, len(links))
+	seen := make(map[string]struct{}, len(links))
 	for _, l := range links {
-		unique[l] = struct{}{}
+		seen[l] = struct{}{}
 	}
-	uniqueLinks := make([]string, 0, len(unique))
-	for l := range unique {
+	uniqueLinks := make([]string, 0, len(seen))
+	for l := range seen {
 		uniqueLinks = append(uniqueLinks, l)
 	}
+
+	if len(uniqueLinks) == 0 {
+		return 0
+	}
+
+	linkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
 	type checkResult struct {
 		url        string
 		accessible bool
 	}
 
+	work := make(chan string, len(uniqueLinks))
+	for _, l := range uniqueLinks {
+		work <- l
+	}
+	close(work)
+
 	results := make(chan checkResult, len(uniqueLinks))
 
-	sem := make(chan struct{}, 10)
+	concurrency := linkCheckConcurrency
+	if len(uniqueLinks) < concurrency {
+		concurrency = len(uniqueLinks)
+	}
+
 	var wg sync.WaitGroup
-
-	linkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	for _, link := range uniqueLinks {
+	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
-		go func(l string) {
+		go func() {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			accessible := a.isLinkAccessible(linkCtx, l)
-			results <- checkResult{url: l, accessible: accessible}
-		}(link)
+			for l := range work {
+				results <- checkResult{url: l, accessible: a.isLinkAccessible(linkCtx, l)}
+			}
+		}()
 	}
 
 	go func() {
@@ -163,6 +181,13 @@ func (a *Analyzer) checkInaccessibleLinks(ctx context.Context, links []string) i
 }
 
 func (a *Analyzer) isLinkAccessible(ctx context.Context, url string) bool {
+	select {
+	case a.globalSem <- struct{}{}:
+		defer func() { <-a.globalSem }()
+	case <-ctx.Done():
+		return false
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
 		return false

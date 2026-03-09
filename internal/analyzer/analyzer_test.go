@@ -16,7 +16,8 @@ func newTestAnalyzer(t *testing.T) (*analyzer.Analyzer, *http.Client) {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	client := &http.Client{}
-	return analyzer.New(client, logger), client
+	globalSem := make(chan struct{}, 10)
+	return analyzer.New(client, logger, globalSem), client
 }
 
 // ------- ValidateURL ---------------------------------------------------------

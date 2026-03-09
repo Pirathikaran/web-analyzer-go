@@ -33,7 +33,8 @@ func buildApp(t *testing.T) *httptest.Server {
 	)
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	a := analyzer.New(client, logger)
+	globalSem := make(chan struct{}, 10)
+	a := analyzer.New(client, logger, globalSem)
 	pool := analyzer.NewPool(a, 5, 100)
 	m := metrics.New()
 	h := handler.New(pool, tmpl, m, logger)

@@ -25,7 +25,8 @@ func newHandler(t *testing.T) http.Handler {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	tmpl := template.Must(template.New("").Parse(tmplSrc))
 	client := &http.Client{}
-	a := analyzer.New(client, logger)
+	globalSem := make(chan struct{}, 10)
+	a := analyzer.New(client, logger, globalSem)
 	pool := analyzer.NewPool(a, 5, 100)
 	m := metrics.New()
 	h := handler.New(pool, tmpl, m, logger)

@@ -78,6 +78,9 @@ cd web-analyzer-go
 # Download dependencies
 go mod download
 
+# Copy the env template and edit as needed
+cp .env.example .env
+
 # Run the server
 go run ./cmd/server
 ```
@@ -160,9 +163,45 @@ go test ./...
 
 ## Configuration
 
-| Environment Variable | Default | Description      |
-|----------------------|---------|------------------|
-| `PORT`               | `8080`  | HTTP listen port |
+| Environment Variable | Default | Description                                              |
+|----------------------|---------|----------------------------------------------------------|
+| `PORT`               | `8080`  | HTTP listen port                                         |
+| `POOL_WORKERS`       | `20`    | Number of concurrent analysis workers                    |
+| `POOL_QUEUE`         | `1000`  | Max queued analysis requests before returning 503        |
+| `LINK_SEM`           | `50`    | Max concurrent outbound link-check HTTP requests         |
+
+### Tuning Guide
+
+- **`POOL_WORKERS`** — increase if you have spare CPU/network capacity and see high queue wait times; decrease to reduce outbound load.
+- **`POOL_QUEUE`** — buffer for bursts. If requests arrive faster than workers process them and the queue fills, clients receive a `503 Server Busy`. Size this to your expected burst length.
+- **`LINK_SEM`** — global cap on simultaneous outbound HEAD/GET requests across all workers. Prevents overwhelming target servers or exhausting local file descriptors. Rule of thumb: `POOL_WORKERS × 10` is the uncapped ceiling; `LINK_SEM` keeps it sane.
+
+### Setup
+
+Copy the template and edit values for your environment:
+
+```bash
+cp .env.example .env
+```
+
+`.env` is gitignored — never committed. `.env.example` is committed as the canonical reference.
+
+> **Note:** Go does not auto-load `.env` files. Use a process manager (Docker, systemd, Make) to source them, or export manually:
+> ```bash
+> export $(grep -v '^#' .env | xargs) && go run ./cmd/server
+> ```
+
+### Example: high-throughput deployment
+
+```bash
+POOL_WORKERS=40 POOL_QUEUE=2000 LINK_SEM=100 ./server
+```
+
+### Example: low-resource / rate-limited environment
+
+```bash
+POOL_WORKERS=5 POOL_QUEUE=200 LINK_SEM=20 ./server
+```
 
 ---
 
@@ -184,7 +223,5 @@ go test ./...
 - **Horizontal Scalability** — Deploy multiple instances of the service behind a load balancer so the system can handle higher traffic and scale efficiently.
 
 - **Security Improvements** — Add HTTP security headers and implement additional validation to prevent attacks such as Server-Side Request Forgery (SSRF).
-
-- **Configuration Management** — Move configurable values (worker pool size, request timeout, rate limits) to environment variables to improve maintainability and deployment flexibility.
 
 - **Observability Enhancements** — Extend monitoring by adding dashboards with Grafana and perform load testing using k6 to evaluate performance under heavy traffic.
