@@ -22,22 +22,9 @@ When you submit a URL, the analyzer:
 
 ---
 
-## Screenshots
+## Demo
 
-### Home Page
-![Enter a valid URL](enter-valide-url.png)
-
-### Successful Analysis
-![Success](success.png)
-
-### Login Form Detected
-![Login form detected](login-screen-find.png)
-
-### Blocked / Bot-Protected Site
-![Blocked URL](blocked-url.png)
-
-### Unreachable / No Website Error
-![No website error](no-website-error.png)
+<video src="demo.mp4" controls width="100%"></video>
 
 ---
 
