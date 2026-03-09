@@ -8,20 +8,15 @@ import (
 )
 
 func collectLinks(doc *html.Node, base *url.URL) (internal, external []string) {
-	seen := make(map[string]struct{})
-
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "a" {
 			if href := attrVal(n, "href"); href != "" {
 				if abs, ok := resolveURL(base, href); ok {
-					if _, dup := seen[abs]; !dup {
-						seen[abs] = struct{}{}
-						if isInternal(base, abs) {
-							internal = append(internal, abs)
-						} else {
-							external = append(external, abs)
-						}
+					if isInternal(base, abs) {
+						internal = append(internal, abs)
+					} else {
+						external = append(external, abs)
 					}
 				}
 			}

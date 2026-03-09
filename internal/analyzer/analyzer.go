@@ -107,40 +107,37 @@ func (a *Analyzer) Analyze(ctx context.Context, rawURL string) (*Result, error) 
 }
 
 func (a *Analyzer) checkInaccessibleLinks(ctx context.Context, links []string) int {
+	unique := make(map[string]struct{}, len(links))
+	for _, l := range links {
+		unique[l] = struct{}{}
+	}
+	uniqueLinks := make([]string, 0, len(unique))
+	for l := range unique {
+		uniqueLinks = append(uniqueLinks, l)
+	}
+
 	type checkResult struct {
+		url        string
 		accessible bool
 	}
 
-	results := make(chan checkResult, len(links))
+	results := make(chan checkResult, len(uniqueLinks))
 
-	// Limit concurrency to avoid overwhelming targets.
 	sem := make(chan struct{}, 10)
 	var wg sync.WaitGroup
 
-	linkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	linkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	for _, link := range links {
+	for _, link := range uniqueLinks {
 		wg.Add(1)
 		go func(l string) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			req, err := http.NewRequestWithContext(linkCtx, http.MethodHead, l, nil)
-			if err != nil {
-				results <- checkResult{accessible: false}
-				return
-			}
-			req.Header.Set("User-Agent", "web-analyzer/1.0")
-
-			resp, err := a.client.Do(req)
-			if err != nil {
-				results <- checkResult{accessible: false}
-				return
-			}
-			resp.Body.Close()
-			results <- checkResult{accessible: resp.StatusCode < 400}
+			accessible := a.isLinkAccessible(linkCtx, l)
+			results <- checkResult{url: l, accessible: accessible}
 		}(link)
 	}
 
@@ -149,13 +146,50 @@ func (a *Analyzer) checkInaccessibleLinks(ctx context.Context, links []string) i
 		close(results)
 	}()
 
-	inaccessible := 0
+	inaccessibleURLs := make(map[string]struct{})
 	for r := range results {
 		if !r.accessible {
+			inaccessibleURLs[r.url] = struct{}{}
+		}
+	}
+
+	inaccessible := 0
+	for _, l := range links {
+		if _, bad := inaccessibleURLs[l]; bad {
 			inaccessible++
 		}
 	}
 	return inaccessible
+}
+
+func (a *Analyzer) isLinkAccessible(ctx context.Context, url string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("User-Agent", "web-analyzer/1.0")
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode == http.StatusMethodNotAllowed {
+		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return false
+		}
+		req2.Header.Set("User-Agent", "web-analyzer/1.0")
+		resp2, err := a.client.Do(req2)
+		if err != nil {
+			return false
+		}
+		resp2.Body.Close()
+		return resp2.StatusCode < 400
+	}
+
+	return resp.StatusCode < 400
 }
 
 type HTTPError struct {
