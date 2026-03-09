@@ -24,7 +24,7 @@ When you submit a URL, the analyzer:
 
 ## Demo
 
-<video src="demo.mp4" controls width="100%"></video>
+<video src="https://raw.githubusercontent.com/Pirathikaran/web-analyzer-go/master/demo.mp4" controls width="100%"></video>
 
 ---
 
