@@ -5,8 +5,10 @@ import (
 	"errors"
 	"html/template"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Pirathikaran/web-analyzer/internal/analyzer"
@@ -102,22 +104,58 @@ func (h *Handler) runAnalysis(w http.ResponseWriter, r *http.Request, rawURL str
 		h.metrics.RequestsTotal.WithLabelValues("error").Inc()
 		h.metrics.RequestDuration.WithLabelValues("error").Observe(duration)
 
-		var httpErr *analyzer.HTTPError
-		status := http.StatusBadGateway
-		msg := err.Error()
-		if errors.As(err, &httpErr) {
-			msg = httpErr.Error()
-			status = http.StatusBadGateway
-		}
-
 		h.logger.WarnContext(r.Context(), "analysis failed", "url", rawURL, "error", err)
-		h.render(w, r, status, pageData{URL: rawURL, Error: msg})
+		h.render(w, r, http.StatusBadGateway, pageData{URL: rawURL, Error: friendlyError(err)})
 		return
 	}
 
 	h.metrics.RequestsTotal.WithLabelValues("success").Inc()
 	h.metrics.RequestDuration.WithLabelValues("success").Observe(duration)
 	h.render(w, r, http.StatusOK, pageData{URL: rawURL, Result: result})
+}
+
+func friendlyError(err error) string {
+	var httpErr *analyzer.HTTPError
+	if errors.As(err, &httpErr) {
+		switch httpErr.Code {
+		case 999:
+			return "This website blocks automated access (bot protection). It cannot be analyzed."
+		case 401, 403:
+			return "Access denied. This website requires authentication or blocks external requests."
+		case 404:
+			return "Page not found (404). Please check the URL and try again."
+		case 429:
+			return "Too many requests. This website is rate-limiting access. Try again later."
+		case 500, 502, 503, 504:
+			return "The target website is currently unavailable (server error). Try again later."
+		default:
+			return httpErr.Error()
+		}
+	}
+
+	raw := err.Error()
+
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return "Website not found. The domain does not exist or cannot be resolved. Please check the URL."
+	}
+
+	switch {
+	case strings.Contains(raw, "no such host"):
+		return "Website not found. The domain does not exist or cannot be resolved. Please check the URL."
+	case strings.Contains(raw, "connection refused"):
+		return "Connection refused. The website is not accepting connections on that address."
+	case strings.Contains(raw, "i/o timeout"), strings.Contains(raw, "context deadline exceeded"):
+		return "Request timed out. The website took too long to respond."
+	case strings.Contains(raw, "connection reset"):
+		return "The connection was reset by the target server. The website may be blocking requests."
+	case strings.Contains(raw, "no route to host"):
+		return "Unable to reach the website. The host is unreachable from this server."
+	case strings.Contains(raw, "certificate"), strings.Contains(raw, "tls"):
+		return "SSL/TLS error. The website has an invalid or untrusted certificate."
+	}
+
+	return "Unable to analyze the URL. Please check it is correct and the website is publicly accessible."
 }
 
 func (h *Handler) render(w http.ResponseWriter, _ *http.Request, status int, data pageData) {
