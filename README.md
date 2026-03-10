@@ -161,22 +161,7 @@ go test ./...
 
 - **`POOL_WORKERS`** — increase if you have spare CPU/network capacity and see high queue wait times; decrease to reduce outbound load.
 - **`POOL_QUEUE`** — buffer for bursts. If requests arrive faster than workers process them and the queue fills, clients receive a `503 Server Busy`. Size this to your expected burst length.
-- **`LINK_SEM`** — global cap on simultaneous outbound HEAD/GET requests across all workers. Prevents overwhelming target servers or exhausting local file descriptors. Rule of thumb: `POOL_WORKERS × 10` is the uncapped ceiling; `LINK_SEM` keeps it sane.
-
-### Setup
-
-Copy the template and edit values for your environment:
-
-```bash
-cp .env.example .env
-```
-
-`.env` is gitignored — never committed. `.env.example` is committed as the canonical reference.
-
-> **Note:** Go does not auto-load `.env` files. Use a process manager (Docker, systemd, Make) to source them, or export manually:
-> ```bash
-> export $(grep -v '^#' .env | xargs) && go run ./cmd/server
-> ```
+- **`LINK_SEM`** — global cap on simultaneous outbound HEAD/GET requests across all workers. Prevents overwhelming target servers or exhausting local file descriptors. Rule of thumb: `POOL_WORKERS × 10` is the uncapped ceiling; `LINK_SEM` keeps it safe.
 
 ### Example: high-throughput deployment
 
