@@ -35,7 +35,9 @@ func TestIntegration_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /no-such-route: %v", err)
 	}
-	resp.Body.Close()
+	if err := resp.Body.Close(); err != nil {
+		t.Logf("failed to close response body: %v", err)
+	}
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)

@@ -72,7 +72,11 @@ func (a *Analyzer) Analyze(ctx context.Context, rawURL string) (*Result, error) 
 	if err != nil {
 		return nil, fmt.Errorf("fetch URL: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			a.logger.WarnContext(ctx, "failed to close response body", "err", err)
+		}
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, &HTTPError{Code: resp.StatusCode, Message: http.StatusText(resp.StatusCode)}
@@ -198,7 +202,9 @@ func (a *Analyzer) isLinkAccessible(ctx context.Context, url string) bool {
 	if err != nil {
 		return false
 	}
-	resp.Body.Close()
+	if err := resp.Body.Close(); err != nil {
+		a.logger.Warn("failed to close HEAD response body", "err", err)
+	}
 
 	if resp.StatusCode == http.StatusMethodNotAllowed {
 		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -210,7 +216,9 @@ func (a *Analyzer) isLinkAccessible(ctx context.Context, url string) bool {
 		if err != nil {
 			return false
 		}
-		resp2.Body.Close()
+		if err := resp2.Body.Close(); err != nil {
+			a.logger.Warn("failed to close GET response body", "err", err)
+		}
 		return resp2.StatusCode < 400
 	}
 

@@ -17,7 +17,7 @@ func extractTitle(doc *html.Node) string {
 	walk = func(n *html.Node) bool {
 		if n.Type == html.ElementNode && n.Data == "title" {
 			title = nodeText(n)
-			return true // stop
+			return true
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			if walk(c) {

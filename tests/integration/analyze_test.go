@@ -16,7 +16,9 @@ func TestIntegration_AnalyzeMethodNotAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /analyze: %v", err)
 	}
-	resp.Body.Close()
+	if err := resp.Body.Close(); err != nil {
+		t.Logf("failed to close response body: %v", err)
+	}
 
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", resp.StatusCode)
@@ -60,7 +62,7 @@ func TestIntegration_AnalyzeSuccess(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<!DOCTYPE html>
+		if _, err := fmt.Fprint(w, `<!DOCTYPE html>
 <html>
 <head><title>Integration Test Page</title></head>
 <body>
@@ -69,7 +71,9 @@ func TestIntegration_AnalyzeSuccess(t *testing.T) {
   <a href="/internal">internal</a>
   <a href="https://external.example.com">external</a>
 </body>
-</html>`)
+</html>`); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}))
 	defer backend.Close()
 
@@ -100,7 +104,7 @@ func TestIntegration_AnalyzeLoginFormDetected(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<!DOCTYPE html>
+		if _, err := fmt.Fprint(w, `<!DOCTYPE html>
 <html><head><title>Login</title></head>
 <body>
   <form method="POST" action="/login">
@@ -108,7 +112,9 @@ func TestIntegration_AnalyzeLoginFormDetected(t *testing.T) {
     <input type="password" name="password">
     <button>Sign in</button>
   </form>
-</body></html>`)
+</body></html>`); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}))
 	defer backend.Close()
 
@@ -165,14 +171,16 @@ func TestIntegration_HeadingsCountedCorrectly(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<!DOCTYPE html>
+		if _, err := fmt.Fprint(w, `<!DOCTYPE html>
 <html><head><title>Headings Page</title></head>
 <body>
   <h1>One</h1>
   <h1>Two</h1>
   <h2>Sub A</h2>
   <h3>Deep</h3>
-</body></html>`)
+</body></html>`); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}))
 	defer backend.Close()
 

@@ -25,7 +25,9 @@ func TestIntegration_PanicRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /: %v", err)
 	}
-	resp.Body.Close()
+	if err := resp.Body.Close(); err != nil {
+		t.Logf("failed to close response body: %v", err)
+	}
 
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500 after panic recovery", resp.StatusCode)
